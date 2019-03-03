@@ -40,11 +40,16 @@ class OTSHandlers
         $this->errorHandler = new ErrorHandler();
         $this->httpHeaderHandler = new HttpHeaderHandler();
         $this->httpHandler = new HttpHandler();
+        $guzzleClientParams = array(
+          'base_uri' => $config->getEndPoint(),
+          'timeout' => $config->connectionTimeout,
+        );
+        if(class_exists("\Co") && \Co::getuid() > 0) {
+          $handler = new \Aliyun\OTS\Swoole\SwooleGuzzleHandler();
+          $guzzleClientParams['handler'] = \GuzzleHttp\HandlerStack::create($handler);
+        }
 
-        $this->httpClient = new \GuzzleHttp\Client(array(
-            'base_uri' => $config->getEndPoint(),
-            'timeout' => $config->connectionTimeout,
-        ));
+        $this->httpClient = new \GuzzleHttp\Client($guzzleClientParams);
     }
 
     public function doHandle($apiName, array $request) 

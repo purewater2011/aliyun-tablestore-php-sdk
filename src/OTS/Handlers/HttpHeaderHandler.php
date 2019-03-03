@@ -119,12 +119,21 @@ class HttpHeaderHandler
     private function checkAuthorization($context)
     {
         // Step 1, Check if authorization header is there
-        if (!isset($context->responseHeaders[self::OTS_AUTHORIZATION])) {
+        $authorization = null;
+        $authorization_header_key = self::OTS_AUTHORIZATION;
+        if(isset($context->responseHeaders[$authorization_header_key])){
+          $authorization = $context->responseHeaders[$authorization_header_key];
+        }else{
+          $authorization_header_key = strtolower(self::OTS_AUTHORIZATION);
+          if(isset($context->responseHeaders[$authorization_header_key])){
+            $authorization = $context->responseHeaders[$authorization_header_key];
+          }
+        }
+        if (empty($authorization)) {
             if ($context->responseHttpStatus >= 200 && $context->responseHttpStatus < 300) {
                 throw new OTSClientException("\"Authorization\" is missing in response header.");
             }
         }
-        $authorization = $context->responseHeaders[self::OTS_AUTHORIZATION];
 
         // Step 2, check if authorization is valid
         if (substr($authorization, 0, 4) != "OTS ") {
