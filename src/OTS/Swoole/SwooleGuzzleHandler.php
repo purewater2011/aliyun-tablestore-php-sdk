@@ -92,12 +92,12 @@ class SwooleGuzzleHandler {
       }
 
       $this->client->execute($path);
-
       $response = $this->getResponse();
-
       $statusCode = $response->getStatusCode();
 
-      if((301 === $statusCode || 302 === $statusCode) && $options[RequestOptions::ALLOW_REDIRECTS] && ++$count <= $options[RequestOptions::ALLOW_REDIRECTS]['max']) {
+      if((301 === $statusCode || 302 === $statusCode)
+        && $options[RequestOptions::ALLOW_REDIRECTS]
+        && ++$count <= $options[RequestOptions::ALLOW_REDIRECTS]['max']) {
         // 自己实现重定向
         $uri = new Uri($response->getHeaderLine('location'));
         $isLocation = true;
@@ -186,6 +186,7 @@ class SwooleGuzzleHandler {
       $headers['set-cookie'] = $this->client->set_cookie_headers;
     }
     $response = new \GuzzleHttp\Psr7\Response($this->client->statusCode, $headers, $this->client->body);
+    $this->client->close();
     return $response;
   }
 }
