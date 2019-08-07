@@ -100,6 +100,7 @@ class SwooleGuzzleHandler {
       $this->client->execute($path);
 
       $response = $this->getResponse();
+      $this->client->close();
 
       $statusCode = $response->getStatusCode();
 
@@ -192,7 +193,12 @@ class SwooleGuzzleHandler {
       $headers['set-cookie'] = $this->client->set_cookie_headers;
     }
     if($this->client->statusCode <= 0) {
-      $message = "error " . socket_strerror($this->client->errCode) . " when request url:\n" . $this->request->getUri();
+      $message = "error " . socket_strerror($this->client->errCode) . " when request url:"
+        . "\n" . $this->request->getUri()
+        . "\nstatus code is: " . $this->client->statusCode
+        . "\nbody length is: " . strlen($this->client->body)
+        . "\n";
+      $this->client->close();
       throw new \RuntimeException($message);
     }
     $response = new \GuzzleHttp\Psr7\Response($this->client->statusCode, $headers, $this->client->body);
