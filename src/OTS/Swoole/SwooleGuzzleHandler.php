@@ -25,6 +25,11 @@ class SwooleGuzzleHandler {
   private $settings = [];
 
   /**
+   * @var RequestInterface
+   */
+  private $request = null;
+
+  /**
    * Sends an HTTP request.
    *
    * @param RequestInterface $request Request to send.
@@ -33,6 +38,7 @@ class SwooleGuzzleHandler {
    * @return PromiseInterface
    */
   public function __invoke(RequestInterface $request, array $options) {
+    $this->request = $request;
     $uri = $request->getUri();
     $isLocation = false;
     $count = 0;
@@ -92,12 +98,12 @@ class SwooleGuzzleHandler {
       }
 
       $this->client->execute($path);
+
       $response = $this->getResponse();
+
       $statusCode = $response->getStatusCode();
 
-      if((301 === $statusCode || 302 === $statusCode)
-        && $options[RequestOptions::ALLOW_REDIRECTS]
-        && ++$count <= $options[RequestOptions::ALLOW_REDIRECTS]['max']) {
+      if((301 === $statusCode || 302 === $statusCode) && $options[RequestOptions::ALLOW_REDIRECTS] && ++$count <= $options[RequestOptions::ALLOW_REDIRECTS]['max']) {
         // 自己实现重定向
         $uri = new Uri($response->getHeaderLine('location'));
         $isLocation = true;
@@ -185,8 +191,11 @@ class SwooleGuzzleHandler {
     if(isset($headers['set-cookie'])) {
       $headers['set-cookie'] = $this->client->set_cookie_headers;
     }
+    if($this->client->statusCode <= 0) {
+      $message = "error " . socket_strerror($this->client->errCode) . " when request url:\n" . $this->request->getUri();
+      throw new \RuntimeException($message);
+    }
     $response = new \GuzzleHttp\Psr7\Response($this->client->statusCode, $headers, $this->client->body);
-    $this->client->close();
     return $response;
   }
 }
