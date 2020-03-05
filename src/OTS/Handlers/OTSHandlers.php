@@ -44,7 +44,7 @@ class OTSHandlers
           'base_uri' => $config->getEndPoint(),
           'timeout' => $config->connectionTimeout,
         );
-        if(class_exists("\Co") && \Co::getuid() > 0) {
+        if(class_exists("\Swoole\Coroutine") && \Swoole\Coroutine::getuid() > 0) {
           $handler = new \Aliyun\OTS\Swoole\SwooleGuzzleHandler();
           $guzzleClientParams['handler'] = \GuzzleHttp\HandlerStack::create($handler);
         }
