@@ -1,40 +1,24 @@
 <?php
 
 /**
- * This file is part of MangaToon server projects.
+ * @deprecated
  */
 namespace Aliyun\OTS\Swoole;
 
+use \Swoole\Coroutine;
 use \GuzzleHttp\RequestOptions;
-use Hyperf\Pool\SimplePool\Connection;
-use Swoole\Coroutine;
 use \Swoole\Coroutine\Http\Client;
 use \Psr\Http\Message\RequestInterface;
 use \GuzzleHttp\Promise\FulfilledPromise;
 use \GuzzleHttp\Psr7\Uri;
-use \GuzzleHttp\Psr7\Response;
-use Hyperf\Contract\StdoutLoggerInterface;
-use Hyperf\Di\Annotation\Inject;
-use Hyperf\Utils\ApplicationContext;
 
-class SwooleGuzzleHandler {
-
-  /**
-   * @Inject
-   * @var StdoutLoggerInterface
-   */
-  protected $logger;
-
+class SwooleGuzzleHandlerOld {
   /**
    * Swoole 协程 Http 客户端
    *
    * @var \Swoole\Coroutine\Http\Client
    */
   private $client;
-  /**
-   * @var Connection
-   */
-  private $client_connection;
 
   /**
    * 配置选项
@@ -49,12 +33,6 @@ class SwooleGuzzleHandler {
   private $request = null;
 
   /**
-   * @var Response
-   */
-  private $response = null;
-
-
-  /**
    * Sends an HTTP request.
    *
    * @param RequestInterface $request Request to send.
@@ -63,21 +41,21 @@ class SwooleGuzzleHandler {
    * @return PromiseInterface
    */
   public function __invoke(RequestInterface $request, array $options) {
-    $this->logger = ApplicationContext::getContainer()->get(StdoutLoggerInterface::class);
-
     $this->request = $request;
     $uri = $request->getUri();
-    $this->logger->debug("about to request " . $uri);
     $isLocation = false;
     $count = 0;
     do {
-      $pool = SwooleGuzzlePoolManager::manager()->pool($uri);
-      $this->client_connection = $pool->get();
-      $this->client = $this->client_connection->getConnection();
-      $this->logger->debug("got connection from ots pool"
-        . " cid=" . Coroutine::getCid() . ","
-        . " current={$pool->getCurrentConnections()},"
-        . " channel={$pool->getConnectionsInChannel()} " . $uri);
+      $port = $uri->getPort();
+      if(null === $port) {
+        if('https' === $uri->getScheme()) {
+          $port = 443;
+        } else {
+          $port = 80;
+        }
+      }
+
+      $this->client = new Client($uri->getHost(), $port, 'https' === $uri->getScheme());
 
       // method
       if($isLocation) {
@@ -91,11 +69,6 @@ class SwooleGuzzleHandler {
         $this->client->setData((string)$request->getBody());
       }
 
-      // 其它处理
-      $this->parseSSL($request, $options);
-      $this->parseProxy($request, $options);
-      $this->parseNetwork($request, $options);
-
       // headers
       $headers = [];
       foreach($request->getHeaders() as $name => $value) {
@@ -106,6 +79,11 @@ class SwooleGuzzleHandler {
         unset($headers['Content-Length']);
       }
       $this->client->setHeaders($headers);
+
+      // 其它处理
+      $this->parseSSL($request, $options);
+      $this->parseProxy($request, $options);
+      $this->parseNetwork($request, $options);
 
       // 设置客户端参数
       if(!empty($this->settings)) {
@@ -122,18 +100,12 @@ class SwooleGuzzleHandler {
         $path .= '?' . $query;
       }
 
-      try {
-        $this->client->execute($path);
-        $response = $this->getResponse();
-        $statusCode = $response->getStatusCode();
-      } catch(\Throwable $e) {
-        $this->client = null;
-        if($this->client_connection != null) {
-          $this->client_connection->release();
-          $this->client_connection = null;
-        }
-        throw $e;
-      }
+      $this->client->execute($path);
+
+      $response = $this->getResponse();
+      $this->client->close();
+
+      $statusCode = $response->getStatusCode();
 
       if((301 === $statusCode || 302 === $statusCode) && $options[RequestOptions::ALLOW_REDIRECTS] && ++$count <= $options[RequestOptions::ALLOW_REDIRECTS]['max']) {
         // 自己实现重定向
@@ -219,37 +191,20 @@ class SwooleGuzzleHandler {
   }
 
   private function getResponse() {
-    if(empty($this->response)) {
-      $headers = isset($this->client->headers) ? $this->client->headers : [];
-      if(isset($headers['set-cookie'])) {
-        $headers['set-cookie'] = $this->client->set_cookie_headers;
-      }
-      if($this->client->statusCode <= 0) {
-        $message = "error " . socket_strerror($this->client->errCode) . " when request url:"
-          . "\n" . $this->request->getUri()
-          . "\nstatus code is: " . $this->client->statusCode . " "
-          . "error code is: " . $this->client->errCode . "(" . socket_strerror($this->client->errCode) . ")"
-          . "\nbody length is: " . strlen($this->client->body)
-          . "\n";
-        $this->client->close();
-        $this->client_connection->close();
-        $this->client_connection->release();
-        throw new \RuntimeException($message);
-      }
-      $this->response = new \GuzzleHttp\Psr7\Response($this->client->statusCode, $headers, $this->client->body);
-      $this->client = null;
-      $this->client_connection->release();
-      $this->client_connection = null;
-
-      if(!$this->logger){
-        $this->logger = ApplicationContext::getContainer()->get(StdoutLoggerInterface::class);
-      }
-      $pool = SwooleGuzzlePoolManager::manager()->pool($this->request->getUri());
-      $this->logger->debug("released connection to ots pool"
-        . " cid=" . Coroutine::getCid() . ","
-        . " current={$pool->getCurrentConnections()},"
-        . " channel={$pool->getConnectionsInChannel()} " . $this->request->getUri());
+    $headers = isset($this->client->headers) ? $this->client->headers : [];
+    if(isset($headers['set-cookie'])) {
+      $headers['set-cookie'] = $this->client->set_cookie_headers;
     }
-    return $this->response;
+    if($this->client->statusCode <= 0) {
+      $message = "error " . socket_strerror($this->client->errCode) . " when request url:"
+        . "\n" . $this->request->getUri()
+        . "\nstatus code is: " . $this->client->statusCode
+        . "\nbody length is: " . strlen($this->client->body)
+        . "\n";
+      $this->client->close();
+      throw new \RuntimeException($message);
+    }
+    $response = new \GuzzleHttp\Psr7\Response($this->client->statusCode, $headers, $this->client->body);
+    return $response;
   }
 }
