@@ -64,7 +64,7 @@ class SwooleGuzzleHandler {
    */
   public function __invoke(RequestInterface $request, array $options) {
     $this->logger = ApplicationContext::getContainer()->get(StdoutLoggerInterface::class);
-
+    $this->response = null;
     $this->request = $request;
     $uri = $request->getUri();
     $this->logger->debug("about to request " . $uri);
